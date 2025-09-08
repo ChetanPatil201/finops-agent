@@ -1,0 +1,87 @@
+name: FinOps Agent CI/CD
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: [3.11, 3.12]
+
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ matrix.python-version }}
+    
+    - name: Install uv
+      uses: astral-sh/setup-uv@v2
+      with:
+        version: "latest"
+    
+    - name: Install dependencies
+      run: |
+        uv sync
+    
+    - name: Lint with flake8
+      run: |
+        uv run flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
+        uv run flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
+    
+    - name: Type check with mypy
+      run: |
+        uv run mypy lib/ --ignore-missing-imports
+    
+    - name: Test CLI help
+      run: |
+        uv run python finops_cli.py --help
+    
+    - name: Test status command (without Azure credentials)
+      run: |
+        uv run python finops_cli.py status || true
+
+  security:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.12'
+    
+    - name: Install uv
+      uses: astral-sh/setup-uv@v2
+      with:
+        version: "latest"
+    
+    - name: Install dependencies
+      run: |
+        uv sync
+    
+    - name: Security check with bandit
+      run: |
+        uv run bandit -r lib/ -f json -o bandit-report.json || true
+        uv run bandit -r lib/ -ll
+
+  documentation:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Check documentation
+      run: |
+        # Check if README exists and has content
+        test -f README.md && test -s README.md
+        # Check if project documentation exists
+        test -f PROJECT_DOCUMENTATION.md && test -s PROJECT_DOCUMENTATION.md
+        # Check if demo script exists and is executable
+        test -f demo.sh && test -x demo.sh
+        echo "✅ All documentation files present and valid"
